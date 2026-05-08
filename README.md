@@ -185,6 +185,21 @@ Stop работает кросс-платформенно через файл-ф
 - Таймаут одного `claude -p` вызова — env var `TASKFORGE_CLAUDE_TIMEOUT` (default 900 сек).
 - Путь к `claude` бинарнику — env var `TASKFORGE_CLAUDE_BIN`.
 
+### Тесты
+
+Юнит-тесты не требуют живых вызовов `claude` — все парсеры покрыты mock-данными:
+
+```bash
+cd ~/.claude/skills/taskforge
+python3 -m unittest tests.test_taskforge -v
+```
+
+Покрытие: парсинг длительности, slug/hash, валидация конфига (включая разные формы `effort`), извлечение `verdict`/`title`, парсинг thinking-блоков из JSONL (с моком), `effort_for` Orchestrator-а, атомарная запись JSON, наличие 10 тем.
+
+### Полный формат хранения
+
+Подробное описание всех файлов и их полей: [`docs/storage-format.md`](docs/storage-format.md).
+
 ### Лицензия
 
 MIT. См. `LICENSE`.
