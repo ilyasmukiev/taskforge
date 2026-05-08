@@ -45,6 +45,7 @@ CONFIG_PATH = DATA_DIR / "config.json"
 INDEX_PATH = DATA_DIR / "index.json"
 RUNTIME_PATH = STATE_DIR / "runtime.json"
 PIDFILE_PATH = STATE_DIR / "orchestrator.pid"
+STOP_FLAG_PATH = STATE_DIR / "stop.flag"  # cross-platform graceful stop signal
 PROMPTS_DIR = SKILL_DIR / "prompts"
 
 # OMC cache for usage data (preferred when available)
@@ -723,11 +724,16 @@ class Orchestrator:
         def handler(signum, _frame):
             self.log(f"signal {signum} received, requesting graceful stop")
             self._stop_event.set()
-        signal.signal(signal.SIGTERM, handler)
+        # SIGINT works on every platform; SIGTERM is unix-only as a soft signal
         signal.signal(signal.SIGINT, handler)
+        if hasattr(signal, "SIGTERM") and sys.platform != "win32":
+            signal.signal(signal.SIGTERM, handler)
 
     def run(self) -> None:
         ensure_dirs()
+        # Clear any leftover stop flag from previous run
+        if STOP_FLAG_PATH.exists():
+            STOP_FLAG_PATH.unlink()
         PIDFILE_PATH.write_text(str(os.getpid()))
         self.install_signals()
         self._write_runtime(reason="starting")
@@ -740,6 +746,9 @@ class Orchestrator:
         try:
             while True:
                 stop, reason = self._check_limits()
+                # Cross-platform stop flag (works on Windows where SIGTERM is hard-kill)
+                if STOP_FLAG_PATH.exists():
+                    stop, reason = True, "stop.flag"
                 u = self.usage.get() or {}
                 self._write_runtime(
                     five_hour_pct=u.get("five_hour_pct"),
@@ -771,10 +780,11 @@ class Orchestrator:
                     self.log(f"{t.name} still alive after drain — leaving thread")
         finally:
             self._write_runtime(reason="exited", should_stop=True)
-            try:
-                PIDFILE_PATH.unlink()
-            except FileNotFoundError:
-                pass
+            for p in (PIDFILE_PATH, STOP_FLAG_PATH):
+                try:
+                    p.unlink()
+                except FileNotFoundError:
+                    pass
             self.log("orchestrator exit")
 
 
@@ -950,14 +960,20 @@ def cmd_stop(_args) -> int:
     if not PIDFILE_PATH.exists():
         print("taskforge не запущен (no pidfile)")
         return 1
-    try:
-        pid = int(PIDFILE_PATH.read_text().strip())
-        os.kill(pid, signal.SIGTERM)
-        print(f"SIGTERM → {pid} (graceful drain до 30 мин)")
-        return 0
-    except (OSError, ValueError) as e:
-        print(f"Ошибка: {e}")
-        return 1
+    # Always create cross-platform stop flag first
+    ensure_dirs()
+    STOP_FLAG_PATH.write_text(utcnow_iso(), encoding="utf-8")
+    print(f"stop.flag создан в {STOP_FLAG_PATH}")
+    # On unix-like, also send SIGTERM for faster reaction
+    if sys.platform != "win32":
+        try:
+            pid = int(PIDFILE_PATH.read_text().strip())
+            os.kill(pid, signal.SIGTERM)
+            print(f"SIGTERM → {pid}")
+        except (OSError, ValueError) as e:
+            print(f"⚠ SIGTERM failed: {e} (но flag поставлен — оркестратор увидит его за <5 сек)")
+    print("Graceful drain до 30 минут — текущие задачи дочитываются, потом чекпоинт.")
+    return 0
 
 
 def cmd_resume(args) -> int:

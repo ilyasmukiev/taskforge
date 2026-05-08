@@ -61,13 +61,26 @@ description: Длительная фоновая работа Claude Code — N 
    EOF
    ```
 
-4. **Запусти оркестратор в фоне:**
+4. **Запусти оркестратор в фоне.** Зависит от платформы:
+
+   **macOS / Linux:**
    ```bash
    nohup python3 ~/.claude/skills/taskforge/bin/taskforge start \
      --config ~/.claude/skills-data/taskforge/config.json \
      > ~/.claude/skills-data/taskforge/logs/nohup.log 2>&1 &
    echo $!
    ```
+
+   **Windows (PowerShell):**
+   ```powershell
+   $cfg = "$env:USERPROFILE\.claude\skills-data\taskforge\config.json"
+   $log = "$env:USERPROFILE\.claude\skills-data\taskforge\logs\nohup.log"
+   $exe = "$env:USERPROFILE\.claude\skills\taskforge\bin\taskforge"
+   Start-Process -FilePath python -ArgumentList "`"$exe`" start --config `"$cfg`"" `
+                 -RedirectStandardOutput $log -RedirectStandardError $log `
+                 -WindowStyle Hidden -PassThru | Select-Object Id
+   ```
+   На Windows определяй платформу через `$IsWindows` или проверкой `os.name`.
 
 5. **Сообщи пользователю:**
    - PID процесса (вывод `$!`)
@@ -82,7 +95,11 @@ description: Длительная фоновая работа Claude Code — N 
 
 ### Stop-запрос
 
-Запусти `python3 ~/.claude/skills/taskforge/bin/taskforge stop`. Объясни, что graceful shutdown — текущие задачи доводятся до конца, на середине пишется чекпоинт, при следующем `resume` команды продолжат.
+Запусти `python3 ~/.claude/skills/taskforge/bin/taskforge stop`.
+
+CLI кросс-платформенно: создаёт файл-флаг `state/stop.flag`, который оркестратор проверяет раз в 5 секунд, и (на macOS/Linux дополнительно) шлёт `SIGTERM`. На Windows работает только через флаг — без жёсткого kill — поэтому graceful shutdown сохраняется.
+
+Объясни, что graceful shutdown — текущие задачи доводятся до конца, на середине пишется чекпоинт, при следующем `resume` команды продолжат.
 
 ### Resume-запрос
 
