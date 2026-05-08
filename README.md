@@ -85,24 +85,33 @@ python3 ~/.claude/skills/taskforge/bin/taskforge wizard
 
 ### Что в корпусе
 
+Все запуски пишут в **одну** глобальную папку `~/.claude/skills-data/taskforge/` — корпус только пополняется и не сбрасывается.
+
 ```
 ~/.claude/skills-data/taskforge/
 ├── corpus/
 │   └── code-block/
 │       └── 2026-05-08-task-0001/
-│           ├── task.md          # условие от Planner
-│           ├── solution.md      # решение от Executor
-│           ├── review.md        # оценка от Reviewer (verdict в YAML-блоке)
-│           ├── code/            # файлы с кодом, если кодовая тема
-│           └── meta.json        # модели, время, итерации, вердикт
-├── index.json                    # сводный индекс всех задач
-├── config.json                   # параметры последнего запуска
+│           ├── task.md            # условие от Planner (один файл на задачу)
+│           ├── solution-v1.md     # первая попытка Executor
+│           ├── review-v1.md       # вердикт revise + замечания
+│           ├── solution-v2.md     # переделка с учётом фидбека
+│           ├── review-v2.md       # финальный pass
+│           ├── solution.md        # копия финальной (= solution-v2.md)
+│           ├── review.md          # копия финального review
+│           ├── code/              # файлы с кодом, если кодовая тема
+│           └── meta.json          # модели, время, итерации, вердикт
+├── index.json                      # сводный индекс всех задач
+├── config.json                     # параметры последнего запуска
 ├── state/
-│   ├── runtime.json             # текущее состояние оркестратора
-│   ├── orchestrator.pid         # PID работающего процесса
-│   └── teams/<id>/status.json   # статус каждой команды
+│   ├── runtime.json               # текущее состояние оркестратора
+│   ├── orchestrator.pid           # PID работающего процесса
+│   ├── stop.flag                  # флаг graceful stop (если активен)
+│   └── teams/<id>/status.json     # статус каждой команды
 └── logs/run-2026-05-08.log
 ```
+
+**Полный диалог между агентами сохраняется:** все итерации Executor⇄Reviewer лежат отдельными файлами `solution-v{N}.md` / `review-v{N}.md`. Это позволяет потом увидеть, что именно Reviewer попросил исправить и как Executor отреагировал. `solution.md` и `review.md` всегда содержат **последнюю** (финальную) пару — для быстрого доступа.
 
 ### Стоп-условия
 

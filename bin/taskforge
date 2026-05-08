@@ -468,6 +468,9 @@ class TeamRunner(threading.Thread):
                 self.orch.executor_prompt,
                 executor_input,
             )
+            # Persist this iteration's solution immediately — full Planner→Executor→Reviewer
+            # dialogue is preserved across revisions.
+            (task_dir / f"solution-v{iterations}.md").write_text(solution_md, encoding="utf-8")
 
             if self._should_stop():
                 self._save_checkpoint(task_dir, topic, "after_executor", iteration,
@@ -482,6 +485,7 @@ class TeamRunner(threading.Thread):
                 self.orch.reviewer_prompt,
                 reviewer_input,
             )
+            (task_dir / f"review-v{iterations}.md").write_text(review_md, encoding="utf-8")
             verdict = self._extract_verdict(review_md)
 
             if verdict in ("pass", "discard"):
@@ -550,6 +554,7 @@ class TeamRunner(threading.Thread):
                     self.orch.executor_prompt,
                     self._build_executor_input(task_md, review_md, iteration),
                 )
+                (task_dir / f"solution-v{iterations}.md").write_text(solution_md, encoding="utf-8")
                 if self._should_stop():
                     self._save_checkpoint(task_dir, topic, "after_executor", iteration,
                                           task_md, solution_md, review_md, title,
@@ -562,6 +567,7 @@ class TeamRunner(threading.Thread):
                 self.orch.reviewer_prompt,
                 self._build_reviewer_input(task_md, solution_md),
             )
+            (task_dir / f"review-v{iterations}.md").write_text(review_md, encoding="utf-8")
             verdict = self._extract_verdict(review_md)
             if verdict in ("pass", "discard"):
                 break
