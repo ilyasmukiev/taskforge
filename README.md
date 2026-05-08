@@ -92,26 +92,55 @@ python3 ~/.claude/skills/taskforge/bin/taskforge wizard
 ├── corpus/
 │   └── code-block/
 │       └── 2026-05-08-task-0001/
-│           ├── task.md            # условие от Planner (один файл на задачу)
-│           ├── solution-v1.md     # первая попытка Executor
-│           ├── review-v1.md       # вердикт revise + замечания
-│           ├── solution-v2.md     # переделка с учётом фидбека
-│           ├── review-v2.md       # финальный pass
-│           ├── solution.md        # копия финальной (= solution-v2.md)
-│           ├── review.md          # копия финального review
-│           ├── code/              # файлы с кодом, если кодовая тема
-│           └── meta.json          # модели, время, итерации, вердикт
-├── index.json                      # сводный индекс всех задач
-├── config.json                     # параметры последнего запуска
+│           ├── task.md              # условие от Planner (один файл на задачу)
+│           ├── solution-v1.md       # первая попытка Executor
+│           ├── review-v1.md         # вердикт revise + замечания
+│           ├── solution-v2.md       # переделка с учётом фидбека
+│           ├── review-v2.md         # финальный pass
+│           ├── solution.md          # копия финальной (= solution-v2.md)
+│           ├── review.md            # копия финального review
+│           ├── thinking/            # ⭐ нити мысли каждого агента
+│           │   ├── planner.md       # как Planner придумывал задачу
+│           │   ├── executor-v1.md   # как Executor решал в 1-й итерации
+│           │   ├── reviewer-v1.md   # как Reviewer оценивал
+│           │   ├── executor-v2.md
+│           │   └── reviewer-v2.md
+│           ├── sessions/            # ⭐ полные локальные чаты Claude Code
+│           │   ├── planner.jsonl
+│           │   ├── executor-v1.jsonl
+│           │   ├── reviewer-v1.jsonl
+│           │   ├── executor-v2.jsonl
+│           │   └── reviewer-v2.jsonl
+│           ├── agents.json          # ⭐ манифест: роль → session_id, модель, время, токены, стоимость, resume_command
+│           ├── code/                # файлы с кодом, если кодовая тема
+│           ├── meta.json            # модели, время, итерации, вердикт
+│           └── checkpoint.json      # ТОЛЬКО если задача не доделана
+├── index.json                        # сводный индекс всех задач
+├── config.json                       # параметры последнего запуска
 ├── state/
-│   ├── runtime.json               # текущее состояние оркестратора
-│   ├── orchestrator.pid           # PID работающего процесса
-│   ├── stop.flag                  # флаг graceful stop (если активен)
-│   └── teams/<id>/status.json     # статус каждой команды
+│   ├── runtime.json                 # текущее состояние оркестратора
+│   ├── orchestrator.pid             # PID работающего процесса
+│   ├── stop.flag                    # флаг graceful stop (если активен)
+│   └── teams/<id>/status.json       # статус каждой команды
 └── logs/run-2026-05-08.log
 ```
 
-**Полный диалог между агентами сохраняется:** все итерации Executor⇄Reviewer лежат отдельными файлами `solution-v{N}.md` / `review-v{N}.md`. Это позволяет потом увидеть, что именно Reviewer попросил исправить и как Executor отреагировал. `solution.md` и `review.md` всегда содержат **последнюю** (финальную) пару — для быстрого доступа.
+**Что нового и важного:**
+
+- **Полный диалог между агентами:** все итерации Executor⇄Reviewer лежат отдельными файлами `solution-v{N}.md` / `review-v{N}.md`. `solution.md` и `review.md` — финальная пара для быстрого доступа.
+- **Нити мысли (`thinking/`):** при `effort: high` (default) каждый агент возвращает блок thinking — внутри `thinking/<role>-v{N}.md` лежит как агент рассуждал. Полезно когда «решение почти то, но я бы вот тут переделал» — видишь почему модель пошла именно этим путём.
+- **Локальные чаты Claude Code (`sessions/`):** оригинальный JSONL-лог сессии каждого агента (Planner, Executor v1/v2, Reviewer v1/v2). Можно открыть через любой текстовый редактор — он содержит полный диалог.
+- **`agents.json`:** манифест задачи — для каждого агента указан `session_id`, `session_name` (видно в `claude /resume` picker'е), `resume_command` (готовая команда `claude --resume <UUID>`), модель, токены, стоимость и пути к артефактам.
+
+### Открыть локально чат любого агента
+
+В `agents.json` рядом с каждым агентом лежит `resume_command` — например:
+```bash
+claude --resume 0308bdf3-042a-43ff-b2bd-48194dac549e
+```
+Открывается тот самый чат с Planner-ом / Executor-ом / Reviewer-ом, можно дописать сообщение и продолжить руками. Если задача почти то, что нужно — открываешь чат Executor-а и допиливаешь.
+
+Альтернатива — `claude /resume` без аргументов: в picker'е сессии видны по имени `taskforge:planner:code-block:attempt-1`, `taskforge:executor:v1:code-block:2026-05-08-task-0001` и т.д.
 
 ### Стоп-условия
 

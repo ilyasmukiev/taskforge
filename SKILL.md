@@ -44,6 +44,8 @@ description: Длительная фоновая работа Claude Code — N 
 
       Default — все 10. Принимай также «все», «ALL», «*».
 
+   9. **Уровень thinking** (extended reasoning) — `low` / `medium` / `high` / `xhigh` / `max` / `none`. Default `high`. Это **сохраняет нити мысли** Planner/Executor/Reviewer в `thinking/*.md` и в локальные сессии Claude Code. На `none` — без thinking, экономия токенов.
+
 3. **Сохрани config** в JSON-файл:
    ```bash
    mkdir -p ~/.claude/skills-data/taskforge
@@ -51,6 +53,7 @@ description: Длительная фоновая работа Claude Code — N 
    {
      "version": "0.1.0",
      "models": {"planner": "<X>", "executor": "<X>", "reviewer": "<X>"},
+     "effort": {"planner": "<E>", "executor": "<E>", "reviewer": "<E>"},
      "team_count": <N>,
      "duration_seconds": <SECONDS>,
      "session_limit_percent": <PCT>,
