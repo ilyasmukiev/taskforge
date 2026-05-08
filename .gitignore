@@ -1,0 +1,27 @@
+# Никогда не коммитим пользовательские данные
+# (корпус живёт глобально вне репо: ~/.claude/skills-data/taskforge/)
+
+# Локальные кеши Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# Локальные конфиги/ключи (на всякий случай — таких в репо быть не должно)
+.env
+.env.local
+*.credentials
+.credentials.json
+
+# Тестовые временные данные
+.tmp/
+test-output/
