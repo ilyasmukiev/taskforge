@@ -304,5 +304,63 @@ class TestTopics(unittest.TestCase):
             self.assertIn(slug, TF.TOPIC_TITLES)
 
 
+# ─── Personas ─────────────────────────────────────────────────────────────────
+
+class TestLoadPersonas(unittest.TestCase):
+    def test_loads_real_file(self):
+        ps = TF.load_personas(ROOT / "prompts" / "personas.md")
+        self.assertEqual(len(ps), 10)
+        slugs = [s for s, _ in ps]
+        self.assertIn("senior-engineer", slugs)
+        self.assertIn("hobby-programmer", slugs)
+        self.assertIn("student", slugs)
+        self.assertIn("perfectionist", slugs)
+
+    def test_all_have_descriptions(self):
+        for slug, desc in TF.load_personas(ROOT / "prompts" / "personas.md"):
+            self.assertTrue(desc)
+            self.assertGreater(len(desc), 50)  # non-trivial description
+
+    def test_missing_file_returns_empty(self):
+        self.assertEqual(TF.load_personas(ROOT / "doesnotexist.md"), [])
+
+    def test_parses_minimal_inline(self):
+        with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".md", delete=False, encoding="utf-8") as f:
+            f.write("# Header (ignored)\n\n"
+                    "Some intro text (ignored).\n\n"
+                    "## alpha\n\nDescription of alpha persona.\n\n"
+                    "## beta\n\nDescription of beta persona.\n")
+            path = Path(f.name)
+        try:
+            ps = TF.load_personas(path)
+            self.assertEqual([s for s, _ in ps], ["alpha", "beta"])
+            self.assertIn("alpha persona", ps[0][1])
+            self.assertIn("beta persona", ps[1][1])
+        finally:
+            path.unlink()
+
+
+class TestNextPersona(unittest.TestCase):
+    class _Orch:
+        def __init__(self, personas):
+            import threading
+            self.personas = personas
+            self._persona_idx_lock = threading.Lock()
+            self._persona_idx = 0
+
+    def test_round_robin_cycles(self):
+        ps = [("a", "A"), ("b", "B"), ("c", "C")]
+        o = self._Orch(ps)
+        seq = [TF.Orchestrator.next_persona(o)[0] for _ in range(7)]
+        self.assertEqual(seq, ["a", "b", "c", "a", "b", "c", "a"])
+
+    def test_empty_personas_returns_default(self):
+        o = self._Orch([])
+        slug, desc = TF.Orchestrator.next_persona(o)
+        self.assertEqual(slug, "default")
+        self.assertEqual(desc, "")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

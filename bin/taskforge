@@ -133,6 +133,32 @@ def ensure_dirs() -> None:
         d.mkdir(parents=True, exist_ok=True)
 
 
+def load_personas(path: Path) -> list[tuple[str, str]]:
+    """Parse personas.md → [(slug, description), ...].
+
+    Format: each persona is a `## <slug>` heading followed by the description
+    text up to the next `## ` heading or EOF. Top-of-file content (before the
+    first `## `) is ignored.
+    """
+    if not path.exists():
+        return []
+    personas: list[tuple[str, str]] = []
+    current_slug: Optional[str] = None
+    current_lines: list[str] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        if raw.startswith("## "):
+            if current_slug:
+                personas.append((current_slug,
+                                  "\n".join(current_lines).strip()))
+            current_slug = raw[3:].strip()
+            current_lines = []
+        elif current_slug:
+            current_lines.append(raw)
+    if current_slug:
+        personas.append((current_slug, "\n".join(current_lines).strip()))
+    return [(s, d) for s, d in personas if d]
+
+
 def read_json(path: Path, default=None):
     try:
         return json.loads(path.read_text(encoding="utf-8"))
@@ -502,7 +528,8 @@ class TeamRunner(threading.Thread):
 
     def _save_agent_artifacts(self, task_dir: Path, role: str,
                                iteration: Optional[int], run: RunResult,
-                               output_filename: str) -> dict:
+                               output_filename: str,
+                               persona: Optional[str] = None) -> dict:
         """Copy session JSONL, write thinking.md, return manifest record for agents.json."""
         sessions_dir = task_dir / "sessions"
         thinking_dir = task_dir / "thinking"
@@ -546,7 +573,7 @@ class TeamRunner(threading.Thread):
             thinking_rel = f"thinking/{thinking_filename}"
 
         # 3. Manifest record for agents.json.
-        return {
+        record = {
             "role": role,
             "iteration": iteration + 1 if iteration is not None else None,
             "session_id": run.session_id,
@@ -566,6 +593,9 @@ class TeamRunner(threading.Thread):
             "thinking_file": thinking_rel,
             "resume_command": f"claude --resume {run.session_id}",
         }
+        if persona is not None:
+            record["persona"] = persona
+        return record
 
     def _write_agents_manifest(self, task_dir: Path, task_id: str,
                                 agents: list) -> None:
@@ -616,7 +646,10 @@ class TeamRunner(threading.Thread):
     def _do_task(self, topic: str) -> None:
         self._heartbeat("planning", topic=topic)
 
-        planner_input = self._build_planner_input(topic)
+        persona_slug, persona_desc = self.orch.next_persona()
+        self._current_persona = persona_slug  # exposed for artifact saving
+
+        planner_input = self._build_planner_input(topic, persona_desc)
         task_md = ""
         cond_hash = ""
         planner_run: Optional[RunResult] = None
@@ -628,16 +661,20 @@ class TeamRunner(threading.Thread):
                 model=self.orch.config["models"]["planner"],
                 system_prompt=self.orch.planner_prompt,
                 user_prompt=planner_input + extra,
-                name=f"taskforge:planner:{topic}:attempt-{attempt+1}",
+                name=f"taskforge:planner:{topic}:{persona_slug}:attempt-{attempt+1}",
                 effort=self.orch.effort_for("planner"),
             )
             task_md = planner_run.text
             cond_hash = sha256_short(normalize_for_hash(task_md))
             if not self.orch.corpus.has_hash(cond_hash):
                 break
-            self.orch.log(f"{self.team_id} planner duplicate (attempt {attempt+1}/3)")
+            self.orch.log(
+                f"{self.team_id} planner duplicate (attempt {attempt+1}/3) "
+                f"persona={persona_slug}")
         else:
-            self.orch.log(f"{self.team_id} skipping topic {topic} — 3 duplicates in a row")
+            self.orch.log(
+                f"{self.team_id} skipping topic {topic} — 3 duplicates in a row "
+                f"persona={persona_slug}")
             return
 
         # 2. Allocate task path
@@ -650,7 +687,8 @@ class TeamRunner(threading.Thread):
         agents_log: list[dict] = []
         # Persist Planner artifacts (session JSONL, thinking, manifest record).
         agents_log.append(self._save_agent_artifacts(
-            task_dir, "planner", None, planner_run, "task.md"))
+            task_dir, "planner", None, planner_run, "task.md",
+            persona=persona_slug))
         self._write_agents_manifest(task_dir, task_id, agents_log)
 
         if self._should_stop():
@@ -730,6 +768,7 @@ class TeamRunner(threading.Thread):
             "finished_at": finished_at,
             "team_id": self.team_id,
         }
+        meta["planner_persona"] = persona_slug
         write_json_atomic(task_dir / "meta.json", meta)
         ckpt = task_dir / "checkpoint.json"
         if ckpt.exists():
@@ -846,11 +885,20 @@ class TeamRunner(threading.Thread):
         })
         self.orch.log(f"{self.team_id} checkpoint saved at phase={phase} iter={iteration}")
 
-    def _build_planner_input(self, topic: str) -> str:
+    def _build_planner_input(self, topic: str, persona_desc: str = "") -> str:
         recent = self.orch.corpus.recent_titles(topic, 50)
         title = TOPIC_TITLES.get(topic, topic)
         recent_block = "\n".join(f"- {r['title']} ({r['verdict']})" for r in recent) or "— нет —"
+        persona_block = ""
+        if persona_desc:
+            persona_block = (
+                "## Твоя роль (persona)\n\n"
+                f"{persona_desc}\n\n"
+                "Сформулируй условие задачи именно в этой роли — стиль, "
+                "словарь и тон должны ей соответствовать.\n\n"
+            )
         return (
+            f"{persona_block}"
             f"Тема: **{title}** (slug: `{topic}`)\n\n"
             f"Последние 50 задач этой темы (не повторяйся):\n"
             f"{recent_block}\n\n"
@@ -908,13 +956,30 @@ class Orchestrator:
         self.planner_prompt = (PROMPTS_DIR / "planner.md").read_text(encoding="utf-8")
         self.executor_prompt = (PROMPTS_DIR / "executor.md").read_text(encoding="utf-8")
         self.reviewer_prompt = (PROMPTS_DIR / "reviewer.md").read_text(encoding="utf-8")
+        self.personas = load_personas(PROMPTS_DIR / "personas.md")
+        # Optionally restrict to a subset specified in config (config.personas).
+        cfg_personas = config.get("personas")
+        if cfg_personas:
+            allowed = set(cfg_personas)
+            self.personas = [p for p in self.personas if p[0] in allowed]
         self._topic_idx_lock = threading.Lock()
         self._topic_idx = 0
+        self._persona_idx_lock = threading.Lock()
+        self._persona_idx = 0
         self._stop_event = threading.Event()
         self._started_at = time.time()
         self._checkpoint_lock = threading.Lock()
         self._checkpoint_queue = self.corpus.open_checkpoints()
         self._claimed_checkpoints: set[str] = set()
+
+    def next_persona(self) -> tuple[str, str]:
+        """Round-robin pick a (slug, description) persona for Planner."""
+        if not self.personas:
+            return ("default", "")
+        with self._persona_idx_lock:
+            p = self.personas[self._persona_idx % len(self.personas)]
+            self._persona_idx += 1
+            return p
 
     def effort_for(self, role: str) -> str:
         """Effort level for given agent role; defaults to 'high' if missing."""

@@ -131,6 +131,7 @@ python3 ~/.claude/skills/taskforge/bin/taskforge wizard
 - **Нити мысли (`thinking/`):** при `effort: high` (default) каждый агент возвращает блок thinking — внутри `thinking/<role>-v{N}.md` лежит как агент рассуждал. Полезно когда «решение почти то, но я бы вот тут переделал» — видишь почему модель пошла именно этим путём.
 - **Локальные чаты Claude Code (`sessions/`):** оригинальный JSONL-лог сессии каждого агента (Planner, Executor v1/v2, Reviewer v1/v2). Можно открыть через любой текстовый редактор — он содержит полный диалог.
 - **`agents.json`:** манифест задачи — для каждого агента указан `session_id`, `session_name` (видно в `claude /resume` picker'е), `resume_command` (готовая команда `claude --resume <UUID>`), модель, токены, стоимость и пути к артефактам.
+- **Persona Planner-а:** каждый раз Planner работает в одной из 10 ролей (round-robin) — старший инженер, обычный человек-любитель, продакт-менеджер, студент, преподаватель, тех.писатель, скептик, стартапер, перфекционист, domain-эксперт. Это даёт **разнообразие стилей формулировки**: одна и та же тема приходит то сухой технической постановкой, то бытовым описанием, то user-stories. Persona записана в `meta.json` (`planner_persona`), `agents.json` (поле `persona` в planner-записи) и в `session_name` (например `taskforge:planner:logic:hobby-programmer:attempt-1`). Список персон — в `prompts/personas.md`, можно править под себя.
 
 ### Открыть локально чат любого агента
 

@@ -144,9 +144,12 @@ verdict: pass
   "iterations": 2,
   "started_at": "2026-05-08T20:55:01Z",
   "finished_at": "2026-05-08T21:02:43Z",
-  "team_id": "team-2"
+  "team_id": "team-2",
+  "planner_persona": "hobby-programmer"
 }
 ```
+
+`planner_persona` — slug роли, в которой Planner формулировал задачу. Одна из 10 (см. `prompts/personas.md`): `senior-engineer`, `hobby-programmer`, `product-manager`, `student`, `academic`, `technical-writer`, `sceptic`, `startup-founder`, `perfectionist`, `domain-expert`. Перебор round-robin между всеми вызовами Planner-а (независимо от темы и команды).
 
 ### `agents.json` — манифест ⭐ главный файл для систематизации
 
@@ -197,8 +200,9 @@ verdict: pass
 |------|-----|------------|
 | `role` | string | `planner` / `executor` / `reviewer` |
 | `iteration` | int / null | номер итерации (1, 2, ...). Для Planner — `null` |
+| `persona` | string | (только у `planner`) роль формулировщика — `senior-engineer`, `hobby-programmer`, `student` и т.д. |
 | `session_id` | UUID | UUID сессии Claude Code |
-| `session_name` | string | человекочитаемое имя — видно в `claude /resume` picker |
+| `session_name` | string | человекочитаемое имя — видно в `claude /resume` picker (для Planner: `taskforge:planner:<topic>:<persona>:attempt-<N>`) |
 | `model` | string | `opus` / `sonnet` / `haiku` |
 | `effort` | string | `none` / `low` / `medium` / `high` / `xhigh` / `max` |
 | `started_at`, `finished_at` | ISO 8601 UTC | таймстемпы |
